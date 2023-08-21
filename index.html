@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" />
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.2/css/font-awesome.min.css" />
+    <link rel="stylesheet" href="css/main.css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+</head>
+
+<body>
+    <div id="frame">
+        <div id="sidepanel">
+            <div id="profile">
+                <div class="wrap">
+                    <img id="profile-img" src="img/user.jpg" class="online" alt="" />
+                    <p id="username"></p>
+                </div>
+            </div>
+            <div id="contacts">
+                <ul>
+                </ul>
+            </div>
+            <div id="bottom-bar">
+                <button id="add-room"><i class="fa fa-user-plus fa-fw" aria-hidden="true"></i> <span>Add New
+                        Room</span></button>
+                <button id="join-room"><i class="fa fa-users fa-fw" aria-hidden="true"></i> <span>Join
+                        Room</span></button>
+            </div>
+        </div>
+        <div id="main-content" class="content" style="display:none">
+            <div class="contact-profile">
+                <img src="img/user.jpg" alt="" />
+                <p id="content-room-name"></p>
+
+                <a id="show-members" href="javascript:void(0)" style="float:right;margin-right:20px"><i
+                        class="fa fa-users"></i></a>
+            </div>
+            <div id="messages" class="messages" style="margin-bottom:20px">
+                <ul>
+                    <!--
+                    <li class="sent">
+                        <img src="http://emilcarlsson.se/assets/mikeross.png" alt="" />
+                        <p>How the hell am I supposed to get a jury to believe you when I am not even sure that I do?!
+                        </p>
+                    </li>
+                    <li class="replies">
+                        <img src="http://emilcarlsson.se/assets/harveyspecter.png" alt="" />
+                        <p>When you're backed against the wall, break the god damn thing down.</p>
+                    </li>
+                    -->
+                </ul>
+            </div>
+            <div class="message-input">
+                <div class="wrap">
+                    <input type="text" placeholder="Write your message..." />
+                    <button class="submit"><i class="fa fa-paper-plane" aria-hidden="true"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+    <script src="js/socket.io.js"></script>
+    <script src="js/swal.js"></script>
+    <script>
+        const HOST_API = "localhost";
+        const HOST_PORT = "3000";
+        let CURRENT_ROOM_ID = "";
+
+        let USERNAME = "";
+
+        function requiredFunction() {
+            USERNAME = prompt('Please enter your username');
+            if (USERNAME == "") {
+                requiredFunction();
+            } else {
+                $("#username").html(USERNAME)
+            }
+        }
+        requiredFunction();
+
+        var socket = new io(`ws://${HOST_API}:${HOST_PORT}`);
+
+
+        socket.on("RECEIVED_MESSAGE", function (data) {
+            let fromMe = false
+            if (data.from == USERNAME) {
+                fromMe = true;
+            }
+
+            $("#messages > ul").append(`<li class="${fromMe ? "sent" : "replies"}">
+                <b style="font-size:12px;font-weight:800;margin-bottom:5px;${fromMe ? "" : "float: right;"}">${fromMe ? "Saya" : data.from}</b><br>
+                <p>
+                    ${data.message}
+                </p>
+            </li>`)
+            renderRooms(USERNAME);
+
+            $('#messages').scrollTop($('#messages')[0].scrollHeight);
+        });
+        function renderRooms(username) {
+            $.ajax({
+                type: "GET",
+                url: `http://${HOST_API}:${HOST_PORT}/room?username=${username}`,
+                cache: false,
+                data: "",
+                success: function (value) {
+                    let htmlContact = ``
+                    for (const data of value.data) {
+                        htmlContact += `<li id="${data._id}" class="contact list-users" room-name="${data.roomName}" room-member="${data.users.join("--")}">
+                            <div class="wrap">
+                                <img src="img/user.jpg" alt="" />
+                                <div class="meta">
+                                    <p class="name">${data.roomName ?? ""}</p>
+                                    <p class="preview">${data.lastMessage ?? "Please enter message"}</p>
+                                </div>
+                            </div>
+                        </li>`
+                    }
+                    $("#contacts > ul").html(htmlContact);
+
+                    $('.list-users').each(function (i, obj) {
+                        $(this).removeClass('active');
+                    });
+                    if (CURRENT_ROOM_ID) $("#" + CURRENT_ROOM_ID).addClass('active');
+
+                    $(".list-users").on("click", function () {
+                        // hide current data
+                        $('.list-users').each(function (i, obj) {
+                            $(this).removeClass('active');
+                        });
+
+                        CURRENT_ROOM_ID = $(this).attr("id");
+                        $(this).addClass('active');
+
+                        $.ajax({
+                            type: "GET",
+                            url: `http://${HOST_API}:${HOST_PORT}/message?roomId=${CURRENT_ROOM_ID}`,
+                            cache: false,
+                            data: "",
+                            success: function (value) {
+                                let htmlMessages = ``
+                                for (const data of value.data) {
+                                    let fromMe = false
+                                    if (data.from == USERNAME) {
+                                        fromMe = true;
+                                    }
+
+                                    htmlMessages = `<li class="${fromMe ? "sent" : "replies"}">
+                                        <b style="font-size:12px;font-weight:800;margin-bottom:5px;${fromMe ? "" : "float: right;"}">${fromMe ? "Saya" : data.from}</b><br>
+                                        <p>
+                                            ${data.message}
+                                        </p>
+                                    </li>` + htmlMessages
+                                }
+                                $("#messages > ul").html(htmlMessages)
+                                $('#messages').scrollTop($('#messages')[0].scrollHeight);
+                            }
+                        });
+
+                        $("#content-room-name").html($(this).attr("room-name"));
+
+                        $("#main-content").show();
+                    });
+                }
+            });
+        }
+        renderRooms(USERNAME);
+
+
+        function newMessage() {
+            message = $(".message-input input").val();
+            if ($.trim(message) == "") {
+                return false;
+            }
+
+            // success create message
+
+            socket.emit('messages', { type: "MESSAGE", body: message, from: USERNAME, roomId: CURRENT_ROOM_ID });
+            $(".message-input input").val(``);
+            renderRooms(USERNAME);
+            /*
+            $('<li class="sent"><img src="http://emilcarlsson.se/assets/mikeross.png" alt="" /><p>' + message + "</p></li>").appendTo($(".messages ul"));
+            $(".message-input input").val(null);
+            $(".contact.active .preview").html("<span>You: </span>" + message);
+            $(".messages").animate({ scrollTop: $(document).height() }, "fast");
+            */
+        }
+
+        $(".submit").click(function () {
+            newMessage();
+        });
+
+        $(window).on("keydown", function (e) {
+            if (e.which == 13) {
+                newMessage();
+                return false;
+            }
+        });
+
+
+        $("#add-room").click(function () {
+            Swal.fire({
+                title: 'Please enter new room name',
+                input: 'text',
+                inputAttributes: {
+                    autocapitalize: 'off'
+                },
+                showCancelButton: true,
+                confirmButtonText: 'Save',
+                showLoaderOnConfirm: true,
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        type: "POST",
+                        url: `http://${HOST_API}:${HOST_PORT}/room`,
+                        cache: false,
+                        data: {
+                            roomName: result.value,
+                            userName: USERNAME
+                        },
+                        success: function (value) {
+                            renderRooms(USERNAME);
+                        }
+                    });
+                }
+            })
+        });
+
+
+        $("#join-room").click(function () {
+            Swal.fire({
+                title: 'Please enter exist room name',
+                input: 'text',
+                inputAttributes: {
+                    autocapitalize: 'off'
+                },
+                showCancelButton: true,
+                confirmButtonText: 'Save',
+                showLoaderOnConfirm: true,
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        type: "POST",
+                        url: `http://${HOST_API}:${HOST_PORT}/room/join`,
+                        data: {
+                            roomName: result.value,
+                            userName: USERNAME
+                        },
+                        success: function (value) {
+                            renderRooms(USERNAME);
+                        },
+                        error: function (xhr, textStatus, error) {
+                            Swal.fire(
+                                'Failed Join Room',
+                                'Room not found / already joined',
+                                'error'
+                            )
+                        }
+                    });
+                }
+            })
+        });
+
+        $("#show-members").click(function () {
+            const roomMember = $(`#${CURRENT_ROOM_ID}`).attr("room-member").split("--")
+
+            Swal.fire({
+                title: "Users Room",
+                html: `▣ ${roomMember.join("<br>▣ ")}`,
+            });
+        });
+
+    </script>
+</body>
+
+</html>
