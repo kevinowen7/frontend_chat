@@ -19,6 +19,9 @@
                 <div class="wrap">
                     <img id="profile-img" src="img/user.jpg" class="online" alt="" />
                     <p id="username"></p>
+
+                    <button class="btn btn-warning" style="margin-left: 10px;" onclick="renameUser()">
+                        <i class="fa fa-edit"></i></button>
                 </div>
             </div>
             <div id="contacts">
@@ -93,16 +96,67 @@
                 fromMe = true;
             }
 
-            $("#messages > ul").append(`<li class="${fromMe ? "sent" : "replies"}">
+            $("#messages > ul").append(`<li id="message_${data._id}" class="${fromMe ? "sent" : "replies"}">
                 <b style="font-size:12px;font-weight:800;margin-bottom:5px;${fromMe ? "" : "float: right;"}">${fromMe ? "Saya" : data.from}</b><br>
                 <p>
                     ${data.message}
                 </p>
+                ${fromMe ? `<button onclick="deleteMessage('${data._id}')"><i class="fa fa-trash"></i></button>` : ``}
             </li>`)
             renderRooms(USERNAME);
 
             $('#messages').scrollTop($('#messages')[0].scrollHeight);
         });
+
+
+        socket.on("RENDER_ROOM", function (data) {
+            console.log(data)
+            $(`#message_${data}`).remove();
+        });
+
+        socket.on("CHANGE_USERNAME_FAILED", function (data) {
+            if (USERNAME == data.to) {
+                Swal.fire(
+                    'Change Username Error',
+                    'Failed',
+                    'error'
+                );
+                USERNAME = data.from;
+                $("#username").html(USERNAME);
+            }
+            $(`#message_${data}`).remove();
+        });
+
+        socket.on("USERNAME_CHANGED", function (data) {
+            console.log(data)
+            $(`.replies > b:contains('${data.from}')`).each(function (index, element) {
+                console.log()
+                $(this).html(data.to)
+            });
+        });
+
+        socket.on("BANNED_USER", function (data) {
+            if (USERNAME == data.from) {
+                Swal.fire(
+                    'Your account got banned for 5 minutes',
+                    'Failed',
+                    'error'
+                );
+                // TODO: logic to banned for 5 minutes
+            }
+        });
+
+        function renameUser() {
+            let newUsername = prompt('Please enter your username', USERNAME);
+            if (newUsername == "") {
+                requiredFunction();
+            } else {
+                socket.emit('messages', { type: "CHANGE_USERNAME", body: newUsername, from: USERNAME });
+                USERNAME = newUsername
+                $("#username").html(newUsername)
+            }
+        }
+
         function renderRooms(username) {
             $.ajax({
                 type: "GET",
@@ -151,11 +205,12 @@
                                         fromMe = true;
                                     }
 
-                                    htmlMessages = `<li class="${fromMe ? "sent" : "replies"}">
+                                    htmlMessages = `<li id="message_${data._id}" class="${fromMe ? "sent" : "replies"}">
                                         <b style="font-size:12px;font-weight:800;margin-bottom:5px;${fromMe ? "" : "float: right;"}">${fromMe ? "Saya" : data.from}</b><br>
                                         <p>
                                             ${data.message}
                                         </p>
+                                        ${fromMe ? `<button onclick="deleteMessage('${data._id}')"><i class="fa fa-trash"></i></button>` : ``}
                                     </li>` + htmlMessages
                                 }
                                 $("#messages > ul").html(htmlMessages)
@@ -190,6 +245,12 @@
             $(".contact.active .preview").html("<span>You: </span>" + message);
             $(".messages").animate({ scrollTop: $(document).height() }, "fast");
             */
+        }
+
+        function deleteMessage(messageId) {
+            socket.emit('messages', { type: "DELETE", body: messageId });
+            $(`#message_${messageId}`).remove();
+
         }
 
         $(".submit").click(function () {
